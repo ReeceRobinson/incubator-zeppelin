@@ -157,15 +157,41 @@ public class SparkInterpreter extends Interpreter {
     return sc != null;
   }
 
-  private static JobProgressListener setupListeners(SparkContext context) {
+  static JobProgressListener setupListeners(SparkContext context) {
     JobProgressListener pl = new JobProgressListener(context.getConf());
     try {
       Object listenerBus = context.getClass().getMethod("listenerBus").invoke(context);
-      Method m = listenerBus.getClass().getMethod("addListener", SparkListener.class);
-      m.invoke(listenerBus, pl);
+
+      Method[] methods = listenerBus.getClass().getMethods();
+      Method addListenerMethod = null;
+      for (Method m : methods) {
+        if (!m.getName().equals("addListener")) {
+          continue;
+        }
+
+        Class<?>[] parameterTypes = m.getParameterTypes();
+
+        if (parameterTypes.length != 1) {
+          continue;
+        }
+
+        if (!parameterTypes[0].isAssignableFrom(JobProgressListener.class)) {
+          continue;
+        }
+
+        addListenerMethod = m;
+        break;
+      }
+
+      if (addListenerMethod != null) {
+        addListenerMethod.invoke(listenerBus, pl);
+      } else {
+        return null;
+      }
     } catch (NoSuchMethodException | SecurityException | IllegalAccessException
         | IllegalArgumentException | InvocationTargetException e) {
       e.printStackTrace();
+      return null;
     }
     return pl;
   }
@@ -281,7 +307,6 @@ public class SparkInterpreter extends Interpreter {
     }
 
     //TODO(jongyoul): Move these codes into PySparkInterpreter.java
-
     String pysparkBasePath = getSystemDefault("SPARK_HOME", "spark.home", null);
     File pysparkPath;
     if (null == pysparkBasePath) {
@@ -304,9 +329,12 @@ public class SparkInterpreter extends Interpreter {
     pythonLibUris.trimToSize();
     if (pythonLibs.length == pythonLibUris.size()) {
       conf.set("spark.yarn.dist.files", Joiner.on(",").join(pythonLibUris));
-      conf.set("spark.files", conf.get("spark.yarn.dist.files"));
+      if (!useSparkSubmit()) {
+        conf.set("spark.files", conf.get("spark.yarn.dist.files"));
+      }
       conf.set("spark.submit.pyArchives", Joiner.on(":").join(pythonLibs));
     }
+
 
     SparkContext sparkContext = new SparkContext(conf);
     return sparkContext;
@@ -314,6 +342,10 @@ public class SparkInterpreter extends Interpreter {
 
   static final String toString(Object o) {
     return (o instanceof String) ? (String) o : "";
+  }
+
+  private boolean useSparkSubmit() {
+    return null != System.getenv("SPARK_SUBMIT");
   }
 
   public static String getSystemDefault(
@@ -670,12 +702,11 @@ public class SparkInterpreter extends Interpreter {
     while (it.hasNext()) {
       ActiveJob job = it.next();
       String g = (String) job.properties().get("spark.jobGroup.id");
-
       if (jobGroup.equals(g)) {
         int[] progressInfo = null;
         try {
           Object finalStage = job.getClass().getMethod("finalStage").invoke(job);
-          if (sparkVersion.getProgress1_0()) {          
+          if (sparkVersion.getProgress1_0()) {
             progressInfo = getProgressFromStage_1_0x(sparkListener, finalStage);
           } else {
             progressInfo = getProgressFromStage_1_1x(sparkListener, finalStage);
@@ -742,7 +773,6 @@ public class SparkInterpreter extends Interpreter {
           this.getClass().forName("org.apache.spark.ui.jobs.UIData$StageUIData");
 
       Method numCompletedTasks = stageUIDataClass.getMethod("numCompleteTasks");
-
       Set<Tuple2<Object, Object>> keys =
           JavaConverters.asJavaSetConverter(stageIdData.keySet()).asJava();
       for (Tuple2<Object, Object> k : keys) {
