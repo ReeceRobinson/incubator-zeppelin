@@ -33,6 +33,7 @@ sudo apt-get install openjdk-7-jdk
 sudo apt-get install git
 sudo apt-get install maven
 sudo apt-get install npm
+sudo apt-get install libfontconfig
 ```
 
 ### Build
@@ -43,6 +44,10 @@ mvn clean package -DskipTests
 
 Build with specific Spark version
 
+Spark 1.5.x
+```
+mvn clean package -Pspark-1.5 -Dhadoop.version=2.2.0 -Phadoop-2.2 -DskipTests
+```
 Spark 1.4.x
 ```
 mvn clean package -Pspark-1.4 -Dhadoop.version=2.2.0 -Phadoop-2.2 -DskipTests
@@ -58,10 +63,6 @@ mvn clean package -Pspark-1.2 -Dhadoop.version=2.2.0 -Phadoop-2.2 -DskipTests
 Spark 1.1.x
 ```
 mvn clean package -Pspark-1.1 -Dhadoop.version=2.2.0 -Phadoop-2.2 -DskipTests 
-```
-Spark 1.5.x
-```
-mvn clean package -Pspark-1.5 -Dhadoop.version=2.2.0 -Phadoop-2.2 -DskipTests
 ```
 CDH 5.X
 ```
